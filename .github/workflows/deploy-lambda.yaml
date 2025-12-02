@@ -1,0 +1,120 @@
+name: Deploy Lambda Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:            
+        description: "Environment name"
+        required: true
+        type: choice
+        options:
+          - dev
+          - stage
+          - qa
+          - prod
+          
+      config_file:
+        description: 'Path to YAML (e.g., .github/config.yaml)'
+        required: true
+        default: '.github/config.yaml'
+      action:
+        description: 'Terraform Action'
+        required: true
+        default: 'plan'
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+      confirm_destroy:
+        description: 'Type YES to confirm destroy'
+        required: false
+
+jobs:
+  Deploy-Lambda-Infra:
+    runs-on: [SecOpsRunner]
+
+    permissions:
+      contents: read 
+
+    env:
+      TERRAFORM_PATH: infra-repo/terraform/lambda   
+      ENV_NAME: ${{ github.event.inputs.environment }}
+
+    steps:
+      - name: Checkout CI/CD Repository
+        uses: actions/checkout@v5
+        with:
+          ref: dev
+
+      - name: Generate GitHub App Token
+        id: app_token
+        uses: tibdex/github-app-token@v2
+        with:
+          app_id: ${{ secrets.APP_ID }}
+          private_key: ${{ secrets.APP_PRIVATE_KEY }}
+          installation_retrieval_mode: id
+          installation_retrieval_payload: ${{ secrets.APP_INSTALLATION_ID }}
+
+      - name: Checkout Infra Repository
+        uses: actions/checkout@v5
+        with:
+          repository: Yash-AI-Technologies/yash-unified-infra
+          path: infra-repo
+          token: ${{ steps.app_token.outputs.token }}
+          ref: feature/lambda
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup yq
+        uses: mikefarah/yq@v4.44.2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.8.5
+
+      - name: Generate TF vars and backend config
+        run: |
+          bash devops-scripts/generate_tfvars.sh ${{ github.event.inputs.config_file }} $ENV_NAME
+
+      - name: View generated Terraform files
+        run: |
+          echo "✅ Generated backend and tfvars:"
+          ls -l $TERRAFORM_PATH
+          echo "📄 backend.tfbackend"
+          cat $TERRAFORM_PATH/backend.tfbackend
+          echo "📄 terraform.auto.tfvars"
+          cat $TERRAFORM_PATH/terraform.auto.tfvars
+
+      - name: Terraform Init
+        run: |
+          cd $TERRAFORM_PATH
+          terraform init -backend-config=backend.tfbackend
+
+      - name: Terraform Plan
+        if: ${{ github.event.inputs.action == 'plan' }}
+        run: |
+          cd $TERRAFORM_PATH
+          terraform plan -input=false
+
+      - name: Terraform Apply
+        if: ${{ github.event.inputs.action == 'apply' }}
+        run: |
+          terraform -chdir=$TERRAFORM_PATH apply -auto-approve -input=false
+
+      - name: Confirm destroy approval
+        if: ${{ github.event.inputs.action == 'destroy' }}
+        run: |
+          if [ "${{ github.event.inputs.confirm_destroy }}" != "YES" ]; then
+            echo "Destroy not confirmed. Exiting."
+            exit 1
+          fi
+
+      - name: Terraform Destroy
+        if: ${{ github.event.inputs.action == 'destroy' }}
+        run: |
+          terraform -chdir=$TERRAFORM_PATH destroy -auto-approve -input=false

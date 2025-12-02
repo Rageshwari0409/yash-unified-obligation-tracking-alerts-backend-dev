@@ -1,0 +1,50 @@
+# Model Configuration for Obligation Tracking System
+# All LLM and generation parameters are stored here
+
+models:
+  gemini:
+    model_name: "gemini/gemini-2.5-flash-lite"
+    provider: "gemini"
+    temperature: 0.3
+    max_tokens: 4096
+    top_p: 0.95
+    top_k: 40
+
+  # Embedding model configuration
+  embedding:
+    model_name: "text-embedding-004"
+    provider: "gemini"
+    dimension: 768
+
+api_settings:
+  timeout: 60
+  max_retries: 3
+  retry_delay: 2
+
+generation_params:
+  # For precise extraction tasks (dates, obligations)
+  extraction_temperature: 0.1
+  # For summarization tasks
+  summary_temperature: 0.5
+  # Default temperature
+  default_temperature: 0.3
+
+extraction_settings:
+  # Maximum number of obligations to extract per document
+  max_obligations_per_doc: 100
+  # Chunk size for large documents (in characters)
+  chunk_size: 8000
+  chunk_overlap: 500
+  similarity_threshold: 0.75
+
+chat_settings:
+  # Number of relevant documents to retrieve for context
+  top_k: 5
+  # Maximum context length in characters
+  max_context_length: 4000
+
+# Application metadata
+app:
+  version: "1.0.0"
+  name: "Obligation Tracking and Alerts"
+

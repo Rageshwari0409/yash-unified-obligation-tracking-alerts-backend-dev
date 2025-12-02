@@ -1,0 +1,43 @@
+AWS_REGION: us-east-1
+AWS_ACCOUNT_ID: 042889969014
+ECR_REPOSITORY: obligation-tracking-alerts-backend
+CLUSTER_NAME: ai-workshop-demo
+
+aws:
+  region: us-east-1
+  account_id: 042889969014
+
+lambda:
+  function_name: obligation-tracking-backend
+  image_tag: lambda-latest
+  lambda_timeout: 900
+  memory_size: 2048
+  zone_name: internal.aifirstenterprise.ai
+  private_alb_name: backend-private-alb
+  ecr_name: obligation-tracking-alerts-backend
+  ephemeral_storage: 512
+  environment_variables:
+    PORT: 8000
+    SERVER_NAME: "OBLIGATION_TRACKING_ALERTS_BACKEND"
+    AGENT_NAME_CONSTANT: "OBLIGATION_TRACKING_ALERTS_AGENT"
+    AGENT_NAME: "OBLIGATION_TRACKING_ALERTS_AGENT"
+    OTEL_RESOURCE_ATTRIBUTES: service.version=1.0.0,service.instance.id=llm-service-yash-unified-obligation-tracking-alerts-backend
+    MODEL_NAME: gemini-2.5-flash-lite
+    CONTAINER_NAME: "meeting-documenter"
+  secrets:
+   - __env__-tiktoken-config
+   - __env__-gemini-config
+   - __env__-lambda-aws-config
+   - __env__-keycloak-config
+   - __env__-otel-config
+   - __env__-unified-db-read-config
+   - __env__-azure-openai-config
+   - __env__-obligation-tracking-config-secret
+
+
+  tags:
+    Environment: "__env__"
+    ManagedBy: Terraform
+    AgentName: "obligation-tracking-alerts-backend"
+    Owner: "PE Team"
+    CostCenter: "NIA-__env__"

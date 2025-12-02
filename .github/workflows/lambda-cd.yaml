@@ -1,0 +1,58 @@
+name: CD - Deploy to Lambda
+
+on:
+  push:
+    branches:
+      - dev
+      - qa
+      - demo
+    paths:
+      - devops-scripts/image-tag.yaml
+
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: [AWSRunner]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Extract branch name
+        id: extract_branch
+        run: |
+          echo "branch_name=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
+
+      - name: Load config.yaml into environment
+        run: |
+          while IFS=":" read -r key value; do
+            key=$(echo "$key" | xargs)
+            value=$(echo "$value" | xargs)
+            if [[ -n "$key" && -n "$value" ]]; then
+              echo "$key=$value" >> $GITHUB_ENV
+            fi
+          done < .github/config.yaml
+
+      - name: Read Lambda config
+        id: config
+        run: |
+          CONFIG_FILE=.github/config.yaml
+          FUNCTION_NAME=$(yq e '.lambda.function_name' $CONFIG_FILE)
+          echo "FUNCTION_NAME=${{ steps.extract_branch.outputs.branch_name }}-${FUNCTION_NAME}" >> $GITHUB_ENV
+
+          CONFIG_FILE_IMAGE=devops-scripts/image-tag.yaml
+          LAMBDA_IMAGE=$(yq e '.LAMBDA_IMAGE' $CONFIG_FILE_IMAGE)
+          echo "LAMBDA_IMAGE=${LAMBDA_IMAGE}" >> $GITHUB_ENV
+
+      - name: Deploy Lambda function 
+        run: |
+            aws lambda update-function-code \
+            --function-name ${{ env.FUNCTION_NAME }} \
+            --image-uri ${{ env.LAMBDA_IMAGE }} \
+            --region us-east-1

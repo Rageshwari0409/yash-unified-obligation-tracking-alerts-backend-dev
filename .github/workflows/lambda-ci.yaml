@@ -1,0 +1,99 @@
+name: Build and Push Lambda Docker Image to AWS ECR
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches:
+      - dev
+    paths-ignore:
+      - devops-scripts/image-tag.yaml
+      - .github/workflows/lambda-cd.yaml
+      - .github/config.yaml
+      - helm/values.yaml
+      - .github/workflows/cd.yaml
+      - .github/workflows/ci.yaml
+
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: [AWSRunner]
+
+    outputs:
+      image_tag: ${{ steps.set_tag.outputs.image_tag }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Extract branch name
+        id: extract_branch
+        run: |
+          echo "branch_name=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
+
+      - name: Setup yq
+        uses: mikefarah/yq@v4.44.2
+
+      - name: Load config.yaml into environment
+        run: |
+          while IFS=":" read -r key value; do
+            key=$(echo "$key" | xargs)
+            value=$(echo "$value" | xargs)
+            if [[ -n "$key" && -n "$value" ]]; then
+              echo "$key=$value" >> $GITHUB_ENV
+            fi
+          done < .github/config.yaml
+
+      - name: Set commit id tag
+        id: set_tag
+        run: |
+          COMMIT_ID=${GITHUB_SHA}
+          echo "IMAGE_TAG=$COMMIT_ID" >> $GITHUB_ENV
+
+      - name: Authenticate Docker to AWS ECR
+        run: |
+          ECR_URI=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+          aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_URI
+
+      - name: Build Docker image
+        run: |
+          docker build -f DockerfileLambda -t $ECR_REPOSITORY:lambda-latest -t $ECR_REPOSITORY:$IMAGE_TAG .
+
+      - name: Tag Docker images for ECR
+        run: |
+          ECR_URI=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}
+          docker tag $ECR_REPOSITORY:lambda-latest $ECR_URI:lambda-latest
+          docker tag $ECR_REPOSITORY:$IMAGE_TAG $ECR_URI:$IMAGE_TAG
+          echo "LAMBDA_IMAGE=$ECR_URI:lambda-latest" >> $GITHUB_ENV
+
+      - name: Push Docker images to ECR
+        run: |
+          ECR_URI=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}
+          docker push $ECR_URI:lambda-latest
+          docker push $ECR_URI:$IMAGE_TAG
+
+      - name: Update image-tag.yaml image tag
+        run: |
+          ECR_URI=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}
+          sed -i "s|^\(\s*LAMBDA_IMAGE:\s*\).*|\1$ECR_URI:${IMAGE_TAG}|" devops-scripts/image-tag.yaml
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
+          git add devops-scripts/image-tag.yaml
+          git commit -m "Update image tag to ${IMAGE_TAG}"
+          git push origin HEAD:${{ steps.extract_branch.outputs.branch_name }}
+
+      - name: Remove local Docker images
+        run: |
+          docker rmi $ECR_REPOSITORY:lambda-latest || true
+          docker rmi $ECR_REPOSITORY:$IMAGE_TAG || true
+          docker rmi ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:lambda-latest || true
+          docker rmi ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:$IMAGE_TAG || true
+
+

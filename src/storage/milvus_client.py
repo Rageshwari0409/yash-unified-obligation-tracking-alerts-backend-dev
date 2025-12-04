@@ -215,33 +215,6 @@ class MilvusClient:
         logger.info(f"Created collection: {collection_name}")
         return collection
 
-    def insert_extract_data(self, data: Dict[str, Any]) -> str:
-        """Insert extracted chunk into extract_data collection."""
-        self._ensure_connected()
-        self.create_extract_data_collection()
-        collection = Collection("extract_data")
-
-        content = (data.get('content', '') or '')[:7000]
-
-        id_val = data.get('id', '')[:60]
-        user_id = data.get('user_id', '')[:60]
-        contract_id = data.get('contract_id', '')[:60]
-
-        insert_data = [
-            [id_val],
-            [user_id],
-            [contract_id],
-            [data.get('chunk_index', 0)],
-            [content],
-            [data.get('embedding', [0.0] * 768)]
-        ]
-
-        collection.insert(insert_data)
-        collection.flush()
-
-        logger.info(f"Inserted extract_data chunk: {data.get('id')}")
-        return data.get('id', '')
-
     def insert_extract_data_batch(self, data_list: List[Dict[str, Any]]) -> List[str]:
         """
         Batch insert multiple chunks into extract_data collection.
@@ -372,34 +345,6 @@ class MilvusClient:
 
         logger.info(f"Created collection: {collection_name}")
         return collection
-
-    def insert_obligation(self, obligation: Dict[str, Any], embedding: List[float]) -> str:
-        """Insert an obligation into the obligations collection."""
-        self._ensure_connected()
-        self.create_obligations_collection()
-        collection = Collection("obligations")
-
-        insert_data = [
-            [obligation.get("id", "")[:100]],
-            [obligation.get("contract_id", "")[:64]],
-            [obligation.get("user_id", "test_user")[:64]],
-            [obligation.get("type", "other")[:50]],
-            [obligation.get("description", "")[:500]],
-            [obligation.get("due_date", "")[:50]],
-            [obligation.get("party_responsible", "")[:200]],
-            [obligation.get("recurrence", "none")[:20]],
-            [obligation.get("priority", "medium")[:10]],
-            [obligation.get("original_text", "")[:1000]],
-            [obligation.get("status", "pending")[:20]],
-            [obligation.get("created_at", "")[:30]],
-            [embedding]
-        ]
-
-        collection.insert(insert_data)
-        collection.flush()
-
-        logger.info(f"Inserted obligation: {obligation.get('id')}")
-        return obligation.get("id", "")
 
     def insert_obligations_batch(
         self,

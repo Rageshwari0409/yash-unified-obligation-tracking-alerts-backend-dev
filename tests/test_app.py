@@ -6,39 +6,44 @@ from fastapi.testclient import TestClient
 from app import app
 
 
-class TestGreetEndpoint:
-    """Test suite for the greet endpoint."""
-    
-    def test_greet_success(self, client):
-        """Test successful greeting response."""
+class TestRootEndpoint:
+    """Test suite for the root endpoint."""
+
+    def test_root_success(self, client):
+        """Test successful root endpoint response."""
         response = client.get("/")
-        
+
         assert response.status_code == 200
-        assert response.json() == {"message": "Hello User"}
-    
-    def test_greet_response_headers(self, client):
+        data = response.json()
+        assert "name" in data
+        assert "version" in data
+        assert "description" in data
+        assert "docs" in data
+        assert "health" in data
+
+    def test_root_response_headers(self, client):
         """Test response headers are correctly set."""
         response = client.get("/")
-        
+
         assert response.status_code == 200
         assert "application/json" in response.headers.get("content-type", "")
-    
-    def test_greet_method_not_allowed(self, client):
-        """Test that POST method is not allowed on greet endpoint."""
+
+    def test_root_method_not_allowed(self, client):
+        """Test that POST method is not allowed on root endpoint."""
         response = client.post("/")
-        
+
         assert response.status_code == 405
-    
-    def test_greet_put_method_not_allowed(self, client):
-        """Test that PUT method is not allowed on greet endpoint."""
+
+    def test_root_put_method_not_allowed(self, client):
+        """Test that PUT method is not allowed on root endpoint."""
         response = client.put("/")
-        
+
         assert response.status_code == 405
-    
-    def test_greet_delete_method_not_allowed(self, client):
-        """Test that DELETE method is not allowed on greet endpoint."""
+
+    def test_root_delete_method_not_allowed(self, client):
+        """Test that DELETE method is not allowed on root endpoint."""
         response = client.delete("/")
-        
+
         assert response.status_code == 405
 
 

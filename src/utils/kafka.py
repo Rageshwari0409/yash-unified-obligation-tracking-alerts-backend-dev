@@ -105,8 +105,7 @@ class KafkaLogger:
         """
         if not self.producer:
             with self._lock:
-                if not self.producer:
-                    if not self._initialize_producer():
+                if not self.producer and not self._initialize_producer(): 
                         logger.warning("Kafka producer is not available. Message not sent.")
                         return
        
@@ -247,14 +246,6 @@ class KafkaEventLogger:
             print("\n--- [KAFKA EVENT DEBUG] ---")
             print(json.dumps(event, indent=2))
             print("-----------------------------\n")
-            # print("\n" + "=" * 60)
-            # print(f"🚀 BACKEND EVENT → Topic: '{self.topic}'")
-            # print("=" * 60)
-            # print(f"📡 Server: {self.server_name}")
-            # print("=" * 60)
-            # print("📤 Full Event JSON:")
-            # print(json.dumps(event, indent=2))
-            # print("=" * 60 + "\n")
 
             self.producer.send(self.topic, value=event)
         except Exception as e:

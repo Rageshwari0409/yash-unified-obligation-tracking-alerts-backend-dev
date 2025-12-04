@@ -42,10 +42,6 @@ class LLMUsageTracker:
 
             kafka_payload = self._prepare_kafka_payload(record, model_name=self.model_name_env)
 
-            # if kafka_payload.get("total_tokens", 0) > 0:
-            #     kafka_logger.log(kafka_payload)
-            # else:
-            #     logging.warning("Response record contains no token usage, skipping Kafka log.")
 
             return {
                 "status": "success",

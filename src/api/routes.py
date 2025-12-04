@@ -189,7 +189,7 @@ async def upload_file(
         logger.info(f"Contract stored with ID: {contract_id}")
 
         # Log: Extracting obligations
-        event_logger.log_event(f"🔍 Analyzing contract for obligations and deadlines...", auth_token)
+        event_logger.log_event("🔍 Analyzing contract for obligations and deadlines...", auth_token)
 
         # Extract obligations using LLM
         obligation_extractor = get_obligation_extractor()
@@ -213,7 +213,7 @@ async def upload_file(
         if obligations:
             event_logger.log_event(f"✅ Found {len(obligations)} obligations and deadlines in the contract", auth_token)
         else:
-            event_logger.log_event(f"ℹ️ No specific obligations found in the contract", auth_token)
+            event_logger.log_event("ℹ️ No specific obligations found in the contract", auth_token)
 
         # Build context from extracted chunks
         context = "\n\n".join([chunk_info.get("text", "") for chunk_info in chunk_data_list[:5]])
@@ -283,7 +283,7 @@ File uploaded and processed successfully. {len(chunk_data_list)} chunks stored f
         logger.info(f"PDF uploaded to S3: {s3_key}")
 
         # Log: Report ready
-        event_logger.log_event(f"📋 Obligation tracking report generated successfully", auth_token)
+        event_logger.log_event("📋 Obligation tracking report generated successfully", auth_token)
 
         return UploadResponse(
             message=response_message,
@@ -298,7 +298,7 @@ File uploaded and processed successfully. {len(chunk_data_list)} chunks stored f
     except Exception as e:
         logger.error(f"Error uploading file: {e}", exc_info=True)
         # Log: Processing failed
-        event_logger.log_event(f"❌ Failed to process contract document", auth_token)
+        event_logger.log_event("❌ Failed to process contract document", auth_token)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -316,7 +316,7 @@ async def chat(
     
     try:
         # Log: Query received
-        event_logger.log_event(f"🔍 Searching contract obligations...", auth_token)
+        event_logger.log_event("🔍 Searching contract obligations...", auth_token)
         
         # Get dynamic LLM config
         llm_params = await get_llm_config(user_metadata)
@@ -352,12 +352,12 @@ Provide a helpful and accurate response based on the document content. If the co
         response_text = llm_client.generate(prompt, token_tracker=token_tracker, llm_params=llm_params)
 
         # Log: Response ready
-        event_logger.log_event(f"✅ Answer ready", auth_token)
+        event_logger.log_event("✅ Answer ready", auth_token)
 
         return ChatResponse(message=response_text)
 
     except Exception as e:
         logger.error(f"Error in chat: {e}", exc_info=True)
         # Log: Chat failed
-        event_logger.log_event(f"❌ Unable to answer your question", auth_token)
+        event_logger.log_event("❌ Unable to answer your question", auth_token)
         raise HTTPException(status_code=500, detail=str(e))

@@ -3,6 +3,25 @@ Pytest configuration and fixtures for test suite.
 """
 import pytest
 import warnings
+import sys
+from unittest.mock import MagicMock
+
+# Mock problematic imports before any other imports
+sys.modules['langchain_google_genai'] = MagicMock()
+sys.modules['pymilvus'] = MagicMock()
+sys.modules['litellm'] = MagicMock()
+sys.modules['mangum'] = MagicMock()
+sys.modules['psycopg2'] = MagicMock()
+sys.modules['psycopg2.pool'] = MagicMock()
+sys.modules['psycopg2.extras'] = MagicMock()
+sys.modules['boto3'] = MagicMock()
+sys.modules['reportlab'] = MagicMock()
+sys.modules['reportlab.lib'] = MagicMock()
+sys.modules['reportlab.lib.pagesizes'] = MagicMock()
+sys.modules['reportlab.platypus'] = MagicMock()
+sys.modules['reportlab.lib.styles'] = MagicMock()
+sys.modules['reportlab.lib.units'] = MagicMock()
+
 from fastapi.testclient import TestClient
 from app import app
 

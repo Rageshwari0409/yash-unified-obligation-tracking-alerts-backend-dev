@@ -82,7 +82,7 @@ class MilvusClient:
             # Ensure disconnection on error
             try:
                 connections.disconnect("default")
-            except:
+            except Exception:
                 pass
             raise
 

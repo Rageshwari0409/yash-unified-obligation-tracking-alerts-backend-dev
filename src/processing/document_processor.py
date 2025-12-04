@@ -170,7 +170,6 @@ class DocumentProcessor:
         current_chunk_sentences = [sentences[0]]
         current_chunk_embedding = embeddings[0]
         chunk_index = 0
-        char_position = 0
         chunk_start = 0
 
         for i in range(1, len(sentences)):

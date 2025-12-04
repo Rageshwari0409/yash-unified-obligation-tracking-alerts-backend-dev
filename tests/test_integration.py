@@ -17,9 +17,10 @@ class TestIntegration:
         # Verify response
         assert response.status_code == 200
         data = response.json()
-        assert "message" in data
-        assert data["message"] == "Hello User"
-        
+        assert "name" in data
+        assert "version" in data
+        assert "description" in data
+
         # Verify headers
         assert response.headers.get("content-type") is not None
     
@@ -33,8 +34,11 @@ class TestIntegration:
         
         # All requests should succeed
         assert all(r.status_code == 200 for r in responses)
-        assert all(r.json() == {"message": "Hello User"} for r in responses)
-    
+        # All responses should have same structure
+        first_response = responses[0].json()
+        assert all("name" in r.json() for r in responses)
+        assert all(r.json() == first_response for r in responses)
+
     def test_app_state_consistency(self, client):
         """Test that app state remains consistent across requests."""
         response1 = client.get("/")

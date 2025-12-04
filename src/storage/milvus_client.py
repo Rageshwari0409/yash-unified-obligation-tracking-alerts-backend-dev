@@ -242,6 +242,49 @@ class MilvusClient:
         logger.info(f"Inserted extract_data chunk: {data.get('id')}")
         return data.get('id', '')
 
+    def insert_extract_data_batch(self, data_list: List[Dict[str, Any]]) -> List[str]:
+        """
+        Batch insert multiple chunks into extract_data collection.
+        Much faster than individual inserts - single flush at the end.
+
+        Args:
+            data_list: List of chunk dictionaries with id, content, embedding, etc.
+
+        Returns:
+            List of inserted IDs
+        """
+        if not data_list:
+            return []
+
+        self._ensure_connected()
+        self.create_extract_data_collection()
+        collection = Collection("extract_data")
+
+        # Prepare batch data
+        ids = []
+        user_ids = []
+        contract_ids = []
+        chunk_indices = []
+        contents = []
+        embeddings = []
+
+        for data in data_list:
+            id_val = data.get('id', '')[:60]
+            ids.append(id_val)
+            user_ids.append(data.get('user_id', '')[:60])
+            contract_ids.append(data.get('contract_id', '')[:60])
+            chunk_indices.append(data.get('chunk_index', 0))
+            contents.append((data.get('content', '') or '')[:7000])
+            embeddings.append(data.get('embedding', [0.0] * 768))
+
+        insert_data = [ids, user_ids, contract_ids, chunk_indices, contents, embeddings]
+
+        collection.insert(insert_data)
+        collection.flush()  # Single flush for all chunks
+
+        logger.info(f"Batch inserted {len(ids)} extract_data chunks")
+        return ids
+
     def search_extract_data(
         self,
         query_embedding: List[float],
@@ -357,6 +400,73 @@ class MilvusClient:
 
         logger.info(f"Inserted obligation: {obligation.get('id')}")
         return obligation.get("id", "")
+
+    def insert_obligations_batch(
+        self,
+        obligations: List[Dict[str, Any]],
+        embeddings: List[List[float]]
+    ) -> List[str]:
+        """
+        Batch insert multiple obligations - single flush for all.
+
+        Args:
+            obligations: List of obligation dictionaries
+            embeddings: List of corresponding embeddings
+
+        Returns:
+            List of inserted obligation IDs
+        """
+        if not obligations or not embeddings:
+            return []
+
+        if len(obligations) != len(embeddings):
+            raise ValueError("Obligations and embeddings lists must have same length")
+
+        self._ensure_connected()
+        self.create_obligations_collection()
+        collection = Collection("obligations")
+
+        # Prepare batch data
+        ids = []
+        contract_ids = []
+        user_ids = []
+        types = []
+        descriptions = []
+        due_dates = []
+        parties = []
+        recurrences = []
+        priorities = []
+        original_texts = []
+        statuses = []
+        created_ats = []
+        emb_list = []
+
+        for obl, emb in zip(obligations, embeddings):
+            ids.append(obl.get("id", "")[:100])
+            contract_ids.append(obl.get("contract_id", "")[:64])
+            user_ids.append(obl.get("user_id", "test_user")[:64])
+            types.append(obl.get("type", "other")[:50])
+            descriptions.append(obl.get("description", "")[:500])
+            due_dates.append(obl.get("due_date", "")[:50])
+            parties.append(obl.get("party_responsible", "")[:200])
+            recurrences.append(obl.get("recurrence", "none")[:20])
+            priorities.append(obl.get("priority", "medium")[:10])
+            original_texts.append(obl.get("original_text", "")[:1000])
+            statuses.append(obl.get("status", "pending")[:20])
+            created_ats.append(obl.get("created_at", "")[:30])
+            emb_list.append(emb)
+
+        insert_data = [
+            ids, contract_ids, user_ids, types, descriptions, due_dates,
+            parties, recurrences, priorities, original_texts, statuses,
+            created_ats, emb_list
+        ]
+
+        collection.insert(insert_data)
+        collection.flush()  # Single flush for all obligations
+
+        logger.info(f"Batch inserted {len(ids)} obligations")
+        return ids
 
     def search_obligations(
         self,

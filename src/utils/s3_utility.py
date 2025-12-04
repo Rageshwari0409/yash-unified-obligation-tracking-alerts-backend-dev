@@ -15,6 +15,9 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+# Constants
+DEFAULT_CONTENT_TYPE = 'application/octet-stream'
+
 # Create a consistent S3 client configuration
 def get_s3_client():
     """Get properly configured S3 client with AWS4-HMAC-SHA256 signature"""
@@ -45,14 +48,13 @@ async def upload_any_file_to_s3(user_id: str, file: UploadFile, folder_name: str
         ).rstrip()
     
     filename = sanitize_filename(file.filename)
-    file_extension = os.path.splitext(filename)[1].lower()
     
     s3_key = f"{folder_name}/{user_id}/{filename}"
     
     content = await file.read()
     
     mime_type, _ = mimetypes.guess_type(filename)
-    content_type = file.content_type or mime_type or 'application/octet-stream'
+    content_type = file.content_type or mime_type or DEFAULT_CONTENT_TYPE
     
     try:
         loop = asyncio.get_event_loop()
@@ -326,8 +328,8 @@ def get_mime_type_from_s3_url(s3_url: str) -> str:
         response = s3_client.head_object(Bucket=bucket_name, Key=object_key)
         
         # Return ContentType from metadata
-        return response.get('ContentType', 'application/octet-stream')
-        
+        return response.get('ContentType', DEFAULT_CONTENT_TYPE)
+
     except Exception as e:
         print(f"Error getting MIME type: {str(e)}")
-        return 'application/octet-stream'  # Default fallback
+        return DEFAULT_CONTENT_TYPE  # Default fallback

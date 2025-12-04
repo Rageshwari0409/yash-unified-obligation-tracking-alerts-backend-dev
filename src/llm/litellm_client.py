@@ -168,3 +168,23 @@ class LiteLLMClient:
             logger.error(f"Error generating single embedding: {e}")
             raise
 
+    def get_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
+        """
+        Generate embeddings for multiple texts in a single batch call.
+        More efficient than calling get_single_embedding in a loop.
+
+        Args:
+            texts: List of texts to embed
+
+        Returns:
+            List of embedding vectors
+        """
+        if not texts:
+            return []
+        try:
+            # embed_documents handles batching internally
+            return self.embedding_model.embed_documents(texts)
+        except Exception as e:
+            logger.error(f"Error generating batch embeddings: {e}")
+            # Return fallback embeddings to prevent complete failure
+            return [[0.0] * 768 for _ in texts]

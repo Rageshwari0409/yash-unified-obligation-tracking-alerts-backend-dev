@@ -54,6 +54,7 @@ def mock_llm_client():
     with patch('src.api.routes.get_llm_client') as mock:
         llm_mock = Mock()
         llm_mock.get_single_embedding = Mock(return_value=[0.1] * 768)
+        llm_mock.get_embeddings_batch = Mock(return_value=[[0.1] * 768, [0.2] * 768])
         llm_mock.generate = Mock(return_value="This is a test response from LLM")
         mock.return_value = llm_mock
         yield llm_mock
@@ -65,9 +66,11 @@ def mock_milvus_client():
     with patch('src.api.routes.get_milvus_client') as mock:
         milvus_mock = Mock()
         milvus_mock.insert_extract_data = Mock()
+        milvus_mock.insert_extract_data_batch = Mock(return_value=["chunk-1", "chunk-2"])
         milvus_mock.create_contracts_collection = Mock()
         milvus_mock.insert_contract = Mock()
         milvus_mock.insert_obligation = Mock()
+        milvus_mock.insert_obligations_batch = Mock(return_value=["obl-1", "obl-2"])
         milvus_mock.search_extract_data = Mock(return_value=[
             {"content": "Sample contract content", "contract_id": "doc-2025-001"}
         ])
@@ -355,9 +358,9 @@ class TestUploadEndpoint:
         """Test upload with Milvus storage error."""
         with patch('src.api.routes.get_milvus_client') as mock:
             milvus_mock = Mock()
-            milvus_mock.insert_extract_data = Mock(side_effect=Exception("Milvus error"))
+            milvus_mock.insert_extract_data_batch = Mock(side_effect=Exception("Milvus error"))
             mock.return_value = milvus_mock
-            
+
             response = client.post(
                 "/api/v1/upload",
                 data={
@@ -365,7 +368,7 @@ class TestUploadEndpoint:
                     "user_metadata": json.dumps({"team_id": "team-123"})
                 }
             )
-            
+
             assert response.status_code == 500
     
     def test_upload_obligation_extraction(

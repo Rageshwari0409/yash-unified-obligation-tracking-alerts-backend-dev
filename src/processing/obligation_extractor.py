@@ -26,31 +26,84 @@ OBLIGATION_TYPES = [
     "other"
 ]
 
-EXTRACTION_PROMPT = """You are an expert contract analyst. Extract ALL obligations, deadlines, and important dates from the following contract text.
+EXTRACTION_PROMPT = """You are an expert contract analyst specializing in obligation extraction and deadline tracking. Your task is to meticulously analyze the contract and extract ALL obligations, commitments, deadlines, and time-sensitive requirements.
 
-For each obligation found, provide:
-1. type: One of these categories: {obligation_types}
-2. description: Brief description of the obligation
-3. due_date: The date in YYYY-MM-DD format (if specific date mentioned), or relative date like "30 days after signing"
-4. party_responsible: Who is responsible for this obligation
-5. recurrence: "one-time", "daily", "weekly", "monthly", "quarterly", "annually", or "none"
-6. priority: "high", "medium", or "low" based on importance
-7. original_text: The exact text from the contract mentioning this obligation
+## EXTRACTION GUIDELINES:
 
-CONTRACT TEXT:
+### What to Extract:
+- Payment obligations and schedules
+- Delivery deadlines and milestones
+- Renewal and termination dates
+- Compliance requirements and audit schedules
+- Notice periods and notification requirements
+- Performance reviews and reporting deadlines
+- Warranty periods and expiration dates
+- Service level agreements (SLAs) and response times
+- Insurance and indemnification requirements
+- Confidentiality and non-disclosure periods
+
+### Obligation Categories:
+{obligation_types}
+
+### For EACH obligation found, provide:
+
+1. **type**: Select the most appropriate category from the list above. Use "other" only if no category fits.
+
+2. **description**: Write a clear, concise description (max 100 words) that captures:
+   - What must be done
+   - Any specific requirements or conditions
+   - Relevant amounts, quantities, or specifications
+
+3. **due_date**: 
+   - Use YYYY-MM-DD format for specific dates (e.g., "2025-12-31")
+   - For relative dates, be specific (e.g., "30 days after contract signing", "within 5 business days of invoice receipt")
+   - If no specific date, use "ongoing" or "as needed"
+
+4. **party_responsible**: 
+   - Identify the party clearly (e.g., "Vendor", "Client", "Service Provider", "Both Parties")
+   - If multiple parties, list primary responsible party first
+
+5. **recurrence**: 
+   - Choose from: "one-time", "daily", "weekly", "monthly", "quarterly", "annually", "none"
+   - Use "one-time" for single occurrences
+   - Use "none" for ongoing obligations without fixed schedule
+
+6. **priority**: 
+   - **high**: Financial obligations, legal compliance, critical deadlines, termination clauses
+   - **medium**: Regular deliverables, standard reporting, routine reviews
+   - **low**: Optional items, informational requirements, non-binding suggestions
+
+7. **original_text**: 
+   - Quote the exact relevant text from the contract (max 200 words)
+   - Include enough context to understand the obligation
+   - Use "..." to indicate omitted text if needed
+
+## IMPORTANT RULES:
+- Extract EVERY obligation, even if it seems minor
+- Do NOT infer obligations that aren't explicitly stated
+- If a date is ambiguous, include both possible interpretations
+- For recurring obligations, extract the first occurrence and note the recurrence
+- Pay special attention to "shall", "must", "will", "required to", "obligated to"
+- Look for hidden obligations in definitions, exhibits, and appendices
+
+## CONTRACT TEXT:
 {contract_text}
 
-Return ONLY a valid JSON array of obligations. If no obligations found, return an empty array [].
-Example format:
+## OUTPUT FORMAT:
+Return ONLY a valid JSON array. No explanations, no markdown, no additional text.
+
+If NO obligations are found, return: []
+
+If obligations are found, use this exact structure:
 [
   {{
     "type": "payment_schedule",
-    "description": "Monthly service fee payment",
+    "description": "Monthly service fee of $5,000 due on the 15th of each month for the duration of the contract term",
     "due_date": "2025-01-15",
     "party_responsible": "Client",
     "recurrence": "monthly",
     "priority": "high",
-    "original_text": "Client shall pay $5000 monthly on the 15th of each month"
+    "original_text": "Client shall pay Vendor a monthly service fee of Five Thousand Dollars ($5,000.00) on or before the fifteenth (15th) day of each calendar month"
   }}
 ]
 

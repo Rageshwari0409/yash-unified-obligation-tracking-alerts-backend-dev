@@ -3,10 +3,12 @@ API Routes for Obligation Tracking System.
 Implements RESTful endpoints for file upload and chat.
 """
 
+import asyncio
 import json
 import logging
 import uuid
 import yaml
+from typing import List, Dict, Any
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends, Form, Request
 
@@ -154,25 +156,34 @@ async def upload_file(
         random_num = str(uuid.uuid4().int)[:3].zfill(3)
         contract_id = f"doc-{year}-{random_num}"
 
-        # Store extracted data chunks in extract_data collection
-        for chunk_info in chunk_data_list:
-            chunk_text = chunk_info.get("text", "")
-            chunk_idx = chunk_info.get("index", 0)
-            chunk_embedding = llm_client.get_single_embedding(chunk_text[:1000])
-            chunk_record = {
-                "id": f"{contract_id}_chunk_{chunk_idx}",
+        # Store extracted data chunks in extract_data collection (BATCH + ASYNC)
+        # Step 1: Generate embeddings in parallel
+        chunk_texts = [chunk_info.get("text", "")[:1000] for chunk_info in chunk_data_list]
+        chunk_embeddings = await asyncio.to_thread(
+            llm_client.get_embeddings_batch, chunk_texts
+        )
+
+        # Step 2: Prepare batch records
+        chunk_records = []
+        for idx, chunk_info in enumerate(chunk_data_list):
+            chunk_records.append({
+                "id": f"{contract_id}_chunk_{chunk_info.get('index', idx)}",
                 "user_id": "test_user",  # Auth disabled for testing
                 "contract_id": contract_id,
-                "chunk_index": chunk_idx,
-                "content": chunk_text[:7900],  # Truncate to fit Milvus limit
-                "embedding": chunk_embedding
-            }
-            milvus_client.insert_extract_data(chunk_record)
-        logger.info(f"Stored {len(chunk_data_list)} chunks in extract_data collection")
+                "chunk_index": chunk_info.get("index", idx),
+                "content": chunk_info.get("text", "")[:7900],
+                "embedding": chunk_embeddings[idx] if idx < len(chunk_embeddings) else [0.0] * 768
+            })
 
-        # Store contract metadata
+        # Step 3: Batch insert (non-blocking)
+        await asyncio.to_thread(milvus_client.insert_extract_data_batch, chunk_records)
+        logger.info(f"Batch stored {len(chunk_records)} chunks in extract_data collection")
+
+        # Store contract metadata (async)
         milvus_client.create_contracts_collection()
-        contract_embedding = llm_client.get_single_embedding(text[:1000])
+        contract_embedding = await asyncio.to_thread(
+            llm_client.get_single_embedding, text[:1000]
+        )
         contract_data = {
             "id": contract_id,
             "user_id": "test_user",  # Auth disabled for testing
@@ -185,29 +196,38 @@ async def upload_file(
             "content_summary": text[:2000],
             "embedding": contract_embedding
         }
-        milvus_client.insert_contract(contract_data)
+        await asyncio.to_thread(milvus_client.insert_contract, contract_data)
         logger.info(f"Contract stored with ID: {contract_id}")
 
         # Log: Extracting obligations
         event_logger.log_event("🔍 Analyzing contract for obligations and deadlines...", auth_token)
 
-        # Extract obligations using LLM
+        # Extract obligations using LLM (async)
         obligation_extractor = get_obligation_extractor()
-        obligations = obligation_extractor.extract_obligations(
-            contract_text=text,
-            contract_id=contract_id,
-            token_tracker=token_tracker,
-            llm_params=llm_params
+        obligations = await asyncio.to_thread(
+            obligation_extractor.extract_obligations,
+            text, contract_id, token_tracker, llm_params
         )
 
-        # Store extracted obligations in Milvus
-        for obligation in obligations:
-            obligation["user_id"] = "test_user"  # Auth disabled for testing
-            obl_embedding = llm_client.get_single_embedding(
-                f"{obligation.get('type', '')} {obligation.get('description', '')} {obligation.get('due_date', '')}"
+        # Store extracted obligations in Milvus (BATCH + ASYNC)
+        if obligations:
+            for obl in obligations:
+                obl["user_id"] = "test_user"  # Auth disabled for testing
+
+            # Generate embeddings for all obligations in batch
+            obl_texts = [
+                f"{obl.get('type', '')} {obl.get('description', '')} {obl.get('due_date', '')}"
+                for obl in obligations
+            ]
+            obl_embeddings = await asyncio.to_thread(
+                llm_client.get_embeddings_batch, obl_texts
             )
-            milvus_client.insert_obligation(obligation, obl_embedding)
-        logger.info(f"Extracted and stored {len(obligations)} obligations for contract {contract_id}")
+
+            # Batch insert obligations
+            await asyncio.to_thread(
+                milvus_client.insert_obligations_batch, obligations, obl_embeddings
+            )
+        logger.info(f"Extracted and batch stored {len(obligations)} obligations for contract {contract_id}")
 
         # Log: Obligations found
         if obligations:
@@ -226,14 +246,29 @@ async def upload_file(
             )
             search_context = "\n\n".join([r.get("content", "") for r in search_results])
 
-            prompt = f"""Based on the following document content, answer the question.
+            prompt = f"""You are a contract analysis assistant. Your task is to answer the user's question based ONLY on the provided document content.
 
-Document Content:
+## DOCUMENT CONTENT:
 {search_context}
 
-Question: {query}
+## USER QUESTION:
+{query}
 
-Provide a detailed answer based on the document."""
+## INSTRUCTIONS:
+1. **Answer based on evidence**: Only use information explicitly stated in the document
+2. **Quote relevant sections**: Include direct quotes to support your answer
+3. **Be specific**: Provide exact dates, amounts, parties, and terms when available
+4. **Acknowledge limitations**: If the document doesn't contain enough information, clearly state what's missing
+5. **Structure your response**: Use bullet points or numbered lists for clarity
+6. **Highlight key terms**: Emphasize important obligations, deadlines, and parties
+
+## RESPONSE FORMAT:
+- Start with a direct answer to the question
+- Provide supporting evidence from the document
+- Include relevant quotes in "quotation marks"
+- If information is not in the document, say: "This information is not explicitly stated in the provided document"
+
+## YOUR ANSWER:"""
             answer = llm_client.generate(prompt, token_tracker=token_tracker, llm_params=llm_params)
 
             document_context = f"""## File: {filename}
@@ -340,14 +375,41 @@ async def chat(
             context = "No relevant documents found."
 
         # Generate response using LLM
-        prompt = f"""Based on the following document content, answer the user's question.
+        prompt = f"""You are an intelligent contract assistant helping users understand their documents. Answer the user's question using the provided document content.
 
-Document Content:
+## DOCUMENT CONTEXT:
 {context}
 
-User Question: {message}
+## USER QUESTION:
+{message}
 
-Provide a helpful and accurate response based on the document content. If the content doesn't contain relevant information, say so."""
+## RESPONSE GUIDELINES:
+
+### If the answer IS in the document:
+1. Provide a clear, direct answer
+2. Quote relevant sections to support your response
+3. Explain any complex legal or technical terms
+4. Highlight important dates, amounts, or parties
+5. Use bullet points for multiple items
+6. Be concise but comprehensive
+
+### If the answer is NOT in the document:
+1. Clearly state: "I cannot find this information in the provided documents"
+2. Suggest what type of document might contain this information
+3. Offer to help with related questions that CAN be answered
+
+### If the question is ambiguous:
+1. Ask for clarification
+2. Provide possible interpretations
+3. Answer each interpretation if possible
+
+### Always:
+- Use professional but friendly language
+- Avoid legal advice (you're providing information, not counsel)
+- Be accurate - don't make assumptions
+- Format responses for readability
+
+## YOUR RESPONSE:"""
 
         response_text = llm_client.generate(prompt, token_tracker=token_tracker, llm_params=llm_params)
 

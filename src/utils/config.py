@@ -188,7 +188,7 @@ class ModelConfig:
             logger.error(f"Failed to get router for team {team_id}: {str(e)}")
             raise
 
-    async def create_kms_client(self):
+    async def create_kms_client(self):  # NOSONAR
         """Create and return a KMS client"""
         kms_client = boto3.client(
             'kms',

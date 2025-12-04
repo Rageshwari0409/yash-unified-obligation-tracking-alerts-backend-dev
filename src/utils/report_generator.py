@@ -88,26 +88,101 @@ class ReportSynthesizer:
     ) -> str:
         """Generate contract analysis narrative with obligation focus."""
 
-        prompt = f"""Generate a professional Contract Analysis Report based on the following document:
+        prompt = f"""You are a senior contract analyst preparing an executive summary report. Create a professional Contract Analysis Report (4-5 pages) with actionable insights.
 
-## Document Context:
+## DOCUMENT CONTEXT:
 {document_context}
 
-## Report Structure Required:
-1. **Contract Overview** - Brief summary of the contract type, parties involved, and purpose.
-2. **Key Terms & Conditions** - Important clauses, dates, and financial terms.
-3. **Obligations Summary** - List of key obligations, responsibilities, and commitments.
-4. **Risk Assessment** - Potential risks, compliance requirements, and critical deadlines.
-5. **Action Items** - Recommended next steps and items requiring attention.
+## CRITICAL RULES:
+1. ONLY include information explicitly found in the document
+2. NO explanations or assumptions - just extracted data
+3. If information is not found, write "Not specified"
+4. Keep report concise: 4-5 pages maximum
+5. DO NOT use tables - use bullet point format instead
 
-## Formatting Rules:
-- Use Markdown formatting
-- Use '##' for section headers
-- Use '###' for sub-headers
-- Use bullet points ('*') for lists
-- Bold important terms, dates, and amounts
-- Keep language clear and professional
-- Focus on actionable insights
+## REPORT STRUCTURE:
+
+### 1. EXECUTIVE SUMMARY (1 paragraph)
+- Contract type and primary purpose
+- Key parties and their roles
+- Contract value and duration
+- Critical obligations and deadlines
+
+### 2. CONTRACT OVERVIEW
+- **Contract Type:** [Extract from document]
+- **Parties Involved:** [List all parties with roles]
+- **Effective Date:** [Extract from document]
+- **Expiration Date:** [Extract from document]
+- **Contract Value:** [Extract from document]
+- **Governing Law:** [Extract from document]
+
+### 3. KEY TERMS & CONDITIONS
+- **Payment Terms:** [Extract exact terms]
+- **Delivery/Performance:** [Extract exact terms]
+- **Warranties & Representations:** [Extract exact terms]
+- **Intellectual Property:** [Extract exact terms]
+- **Confidentiality:** [Extract exact terms]
+- **Termination:** [Extract exact terms]
+
+### 4. OBLIGATIONS SUMMARY
+List each obligation in this format:
+
+**Obligation 1:** [Description]
+- **Responsible Party:** [Party name]
+- **Due Date:** [Date or "Not specified"]
+- **Priority:** [High/Medium/Low]
+- **Status:** [Pending/Complete]
+
+**Obligation 2:** [Description]
+- **Responsible Party:** [Party name]
+- **Due Date:** [Date or "Not specified"]
+- **Priority:** [High/Medium/Low]
+- **Status:** [Pending/Complete]
+
+[Continue for all obligations found]
+
+### 5. RISK ASSESSMENT
+**HIGH RISK:**
+- [List only if found in document]
+
+**MEDIUM RISK:**
+- [List only if found in document]
+
+**LOW RISK:**
+- [List only if found in document]
+
+### 6. COMPLIANCE REQUIREMENTS
+- [Extract from document only]
+
+### 7. CRITICAL DEADLINES
+List in chronological order:
+- **[Date]:** [Obligation] - [Responsible Party]
+- **[Date]:** [Obligation] - [Responsible Party]
+
+### 8. ACTION ITEMS & RECOMMENDATIONS
+**Immediate Priority:**
+- [Action] - Owner: [Party] - Deadline: [Date]
+
+**Short-term:**
+- [Action] - Owner: [Party] - Deadline: [Date]
+
+**Ongoing:**
+- [Action] - Owner: [Party]
+
+## FORMATTING:
+- Use `##` for main headers, `###` for sub-headers
+- Use `**bold**` for labels and important terms
+- Use bullet points (`-`) for lists
+- Dates in YYYY-MM-DD format
+- NO tables - use structured bullet points only
+- Be concise - no filler text
+
+## OUTPUT:
+Generate the complete report in Markdown format. No preamble.
+
+---
+
+# CONTRACT ANALYSIS REPORT
 """
         
         try:
@@ -256,86 +331,168 @@ class ReportSynthesizer:
 
         return text
 
+    def _parse_markdown_table(self, table_lines, styles):
+        """Parse markdown table and return a ReportLab Table flowable."""
+        from reportlab.platypus import Table, TableStyle, Paragraph
+        from reportlab.lib.colors import HexColor
+        from reportlab.lib import colors
+
+        if len(table_lines) < 2:
+            return None
+
+        table_data = []
+        for i, line in enumerate(table_lines):
+            # Skip separator line (|---|---|)
+            if re.match(r'^\|[\s:-]+\|$', line.replace(' ', '')):
+                continue
+
+            # Parse cells
+            cells = [cell.strip() for cell in line.split('|')[1:-1]]
+            if cells:
+                # Format cell content
+                formatted_cells = []
+                for cell in cells:
+                    cell_fmt = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', cell)
+                    cell_fmt = self._sanitize_text(cell_fmt)
+                    # Wrap in Paragraph for proper text wrapping
+                    formatted_cells.append(Paragraph(cell_fmt, styles['Body_Clean']))
+                table_data.append(formatted_cells)
+
+        if not table_data:
+            return None
+
+        # Calculate column widths based on content
+        num_cols = len(table_data[0]) if table_data else 0
+        col_width = 500 / max(num_cols, 1)  # Distribute evenly
+
+        table = Table(table_data, colWidths=[col_width] * num_cols)
+
+        # Style the table
+        table_style = TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), HexColor(self.palette["table_header"])),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('GRID', (0, 0), (-1, -1), 0.5, HexColor(self.palette["table_border"])),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, HexColor(self.palette["table_row_even"])]),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ])
+        table.setStyle(table_style)
+
+        return table
+
     def _parse_markdown_to_flowables(self, text, styles):
         """
-        Robust Markdown parser that handles headers, bold/italic, and
-        prevents bullet point bunching by properly managing ListFlowables.
+        Robust Markdown parser that handles headers, bold/italic, tables,
+        and prevents bullet point bunching by properly managing ListFlowables.
         """
-        from reportlab.platypus import Paragraph, ListFlowable, ListItem, HRFlowable
+        from reportlab.platypus import Paragraph, ListFlowable, ListItem, HRFlowable, Spacer
 
         flowables = []
         lines = text.split('\n')
 
-        # Buffer for gathering list items
+        # Buffers
         list_buffer = []
+        table_buffer = []
+        in_table = False
 
         for line in lines:
-            line = line.strip()
-            if not line:
-                # Empty line: if we have a list buffer, flush it now
+            line_stripped = line.strip()
+
+            # Detect table lines (starts with |)
+            is_table_line = line_stripped.startswith('|') and line_stripped.endswith('|')
+
+            # Handle table accumulation
+            if is_table_line:
+                # Flush list buffer first
                 if list_buffer:
                     flowables.append(ListFlowable(
-                        list_buffer,
-                        bulletType='bullet',
-                        start='circle',
-                        leftIndent=20,
-                        spaceAfter=12
+                        list_buffer, bulletType='bullet', start='circle',
+                        leftIndent=20, spaceAfter=12
+                    ))
+                    list_buffer = []
+
+                table_buffer.append(line_stripped)
+                in_table = True
+                continue
+            elif in_table and table_buffer:
+                # End of table - parse and add it
+                table_flowable = self._parse_markdown_table(table_buffer, styles)
+                if table_flowable:
+                    flowables.append(Spacer(1, 10))
+                    flowables.append(table_flowable)
+                    flowables.append(Spacer(1, 10))
+                table_buffer = []
+                in_table = False
+
+            if not line_stripped:
+                # Empty line: flush list buffer
+                if list_buffer:
+                    flowables.append(ListFlowable(
+                        list_buffer, bulletType='bullet', start='circle',
+                        leftIndent=20, spaceAfter=12
                     ))
                     list_buffer = []
                 continue
 
-            # Basic formatting regex
-            line_fmt = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', line)
+            # Basic formatting
+            line_fmt = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', line_stripped)
             line_fmt = re.sub(r'\*(.+?)\*', r'<i>\1</i>', line_fmt)
-            # Sanitize to remove broken tags
             line_fmt = self._sanitize_text(line_fmt)
-            
+
             # Headers
-            if line.startswith('# '):
+            if line_stripped.startswith('# '):
                 flowables.append(Paragraph(line_fmt[2:], styles['H1_Premium']))
-            elif line.startswith('## '):
+            elif line_stripped.startswith('## '):
                 flowables.append(Paragraph(line_fmt[3:], styles['H1_Premium']))
-            elif line.startswith('### '):
+            elif line_stripped.startswith('### '):
                 flowables.append(Paragraph(line_fmt[4:], styles['H2_Premium']))
-            elif line.startswith('#### '):
+            elif line_stripped.startswith('#### '):
                 flowables.append(Paragraph(line_fmt[5:], styles['H2_Premium']))
-            elif line.startswith('##### '):
+            elif line_stripped.startswith('##### '):
                 flowables.append(Paragraph(line_fmt[6:], styles['H2_Premium']))
-            elif line.startswith('###### '):
+            elif line_stripped.startswith('###### '):
                 flowables.append(Paragraph(line_fmt[7:], styles['H2_Premium']))
-            elif line.startswith('---'):
-                flowables.append(HRFlowable(width="80%", thickness=1, lineCap='round', color=self.palette['slate_accent'], spaceBefore=1, spaceAfter=1, hAlign='CENTER', vAlign='BOTTOM', dash=None))
-                
-            # List Items (Bullets)
-            elif line.startswith('* ') or line.startswith('- '):
+            elif line_stripped.startswith('---'):
+                flowables.append(HRFlowable(
+                    width="80%", thickness=1, lineCap='round',
+                    color=self.palette['slate_accent'], spaceBefore=1, spaceAfter=1,
+                    hAlign='CENTER', vAlign='BOTTOM', dash=None
+                ))
+
+            # List Items
+            elif line_stripped.startswith('* ') or line_stripped.startswith('- '):
                 clean_text = line_fmt[2:]
                 list_buffer.append(ListItem(Paragraph(clean_text, styles['Body_Clean'])))
-                
+
             # Standard Paragraphs
             else:
-                # If we were building a list, flush it first
                 if list_buffer:
                     flowables.append(ListFlowable(
-                        list_buffer, 
-                        bulletType='bullet', 
-                        start='circle', 
-                        leftIndent=20,
-                        spaceAfter=12
+                        list_buffer, bulletType='bullet', start='circle',
+                        leftIndent=20, spaceAfter=12
                     ))
                     list_buffer = []
-                
                 flowables.append(Paragraph(line_fmt, styles['Body_Clean']))
-        
-        # Final flush if script ends with a list
+
+        # Final flush
         if list_buffer:
             flowables.append(ListFlowable(
-                list_buffer, 
-                bulletType='bullet', 
-                start='circle', 
-                leftIndent=20,
-                spaceAfter=12
+                list_buffer, bulletType='bullet', start='circle',
+                leftIndent=20, spaceAfter=12
             ))
-            
+        if table_buffer:
+            table_flowable = self._parse_markdown_table(table_buffer, styles)
+            if table_flowable:
+                flowables.append(Spacer(1, 10))
+                flowables.append(table_flowable)
+
         return flowables
 
     async def _generate_pdf_report(

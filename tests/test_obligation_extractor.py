@@ -61,48 +61,42 @@ class TestExtractObligations:
     
     def test_extract_obligations_with_token_tracker(self, extractor, mock_llm_client):
         """Test obligation extraction with token tracker."""
-        contract_text = "Payment is due monthly."
-        contract_id = "doc-2025-001"
         token_tracker = Mock()
-        
-        obligations = extractor.extract_obligations(
-            contract_text,
-            contract_id,
-            token_tracker=token_tracker
-        )
-        
+        contract_text = "Payment is due on the 15th of each month."
+        contract_id = "doc-2025-001"
+
+        # Call extract_obligations with token tracker
+        extractor.extract_obligations(contract_text, contract_id, token_tracker=token_tracker)
+
         # Verify LLM was called with token tracker
         mock_llm_client.generate.assert_called_once()
         call_kwargs = mock_llm_client.generate.call_args[1]
-        assert call_kwargs["token_tracker"] == token_tracker
-    
+        assert call_kwargs.get("token_tracker") == token_tracker
+
     def test_extract_obligations_with_llm_params(self, extractor, mock_llm_client):
         """Test obligation extraction with LLM parameters."""
-        contract_text = "Payment is due monthly."
-        contract_id = "doc-2025-001"
         llm_params = {"temperature": 0.5, "max_tokens": 1000}
-        
-        obligations = extractor.extract_obligations(
-            contract_text,
-            contract_id,
-            llm_params=llm_params
-        )
-        
+        contract_text = "Payment is due on the 15th of each month."
+        contract_id = "doc-2025-001"
+
+        # Call extract_obligations with llm_params
+        extractor.extract_obligations(contract_text, contract_id, llm_params=llm_params)
+
         # Verify LLM was called with params
         call_kwargs = mock_llm_client.generate.call_args[1]
-        assert call_kwargs["llm_params"] == llm_params
-    
+        assert call_kwargs.get("llm_params") == llm_params
+
     def test_extract_obligations_long_text_truncation(self, extractor, mock_llm_client):
-        """Test that long contract tex
-t is truncated."""
-        contract_text = "A" * 20000  # Very long text
+        """Test that long contract text is truncated."""
+        long_text = "A" * 20000  # Very long text
         contract_id = "doc-2025-001"
-        
-        obligations = extractor.extract_obligations(contract_text, contract_id)
-        
+
+        # Call extract_obligations with long text
+        extractor.extract_obligations(long_text, contract_id)
+
         # Verify LLM was called with truncated text
         call_args = mock_llm_client.generate.call_args
-        prompt = call_args[1]["prompt"]
+        prompt = call_args[0][0] if call_args[0] else call_args[1].get("prompt", "")
         # Prompt should not contain full 20000 chars
         assert len(prompt) < 20000
     
